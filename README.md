@@ -1,12 +1,21 @@
 # remoteaddr
-Go real IP adress package
+Go http real ip header parser module
+
+A forwarders such as a reverse proxy or Cloudflare find the real IP address from the requests made to the http server behind it. Local IP addresses and CloudFlare ip addresses are defined by default within the module. It is possible to define more forwarder IP addresses.
 
 ## Usage
 
 ```
 go get -u github.com/netinternet/remoteaddr
 ```
+
+```
+// remoteaddr.Parse().IP(*http.Request) return to string IPv4 or IPv6 address
+```
+
 ## Example
+
+Run a simple web server and get the real IP address to string format
 
 ```
 package main
@@ -32,6 +41,8 @@ func main() {
 
 ## Example 2 (Nginx or another web service forwarder address)
 
+**AddForwarders([]string{"8.8.8.0/24"})** = Add a new multiple forwarder prefixes
+
 ```
 package main
 
@@ -55,6 +66,8 @@ func main() {
 ```
 
 ## Example 3 (Add an alternative header for real IP address)
+
+**AddHeaders([]string{"True-Client-IP"})** = Add a new multiple real ip headers
 
 ```
 package main
