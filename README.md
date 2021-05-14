@@ -9,7 +9,7 @@ A forwarders such as a reverse proxy or Cloudflare find the real IP address from
 go get -u github.com/netinternet/remoteaddr
 ```
 
-```
+```go
 // remoteaddr.Parse().IP(*http.Request) return to string IPv4 or IPv6 address
 ```
 
@@ -17,7 +17,7 @@ go get -u github.com/netinternet/remoteaddr
 
 Run a simple web server and get the real IP address to string format
 
-```
+```go
 package main
 
 import (
@@ -43,7 +43,7 @@ func main() {
 
 **AddForwarders([]string{"8.8.8.0/24"})** = Add a new multiple forwarder prefixes
 
-```
+```go
 package main
 
 import (
@@ -69,7 +69,7 @@ func main() {
 
 **AddHeaders([]string{"True-Client-IP"})** = Add a new multiple real ip headers
 
-```
+```go
 package main
 
 import (
