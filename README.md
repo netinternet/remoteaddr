@@ -3,6 +3,8 @@ Go http real ip header parser module
 
 A forwarders such as a reverse proxy or Cloudflare find the real IP address from the requests made to the http server behind it. Local IP addresses and CloudFlare ip addresses are defined by default within the module. It is possible to define more forwarder IP addresses.
 
+In Turkey, it is obligatory to keep the port information of IP addresses shared with cgnat by the law no 5651. For this reason, dst port information is also given along with the IP addresses. **If the IP address is behind a proxy, the dst port information is returned as -1.**
+
 ## Usage
 
 ```
@@ -29,7 +31,8 @@ import (
 )
 
 func root(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Your IP address is "+remoteaddr.Parse().IP(r))
+	ip, port := remoteaddr.Parse().IP(r)
+	fmt.Fprintf(w, "Your IP address is "+ip+" and dst port "+port)
 }
 
 func main() {
@@ -55,7 +58,8 @@ import (
 )
 
 func root(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Your IP address is "+remoteaddr.Parse().AddForwarders([]string{"8.8.8.0/24"}).IP(r))
+	ip, port := remoteaddr.Parse().AddForwarders([]string{"8.8.8.0/24"}).IP(r)
+	fmt.Fprintf(w, "Your IP address is "+ip+" and dst port "+port)
 }
 
 func main() {
@@ -81,7 +85,8 @@ import (
 )
 
 func root(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Your IP address is "+remoteaddr.Parse().AddHeaders([]string{"True-Client-IP"}).IP(r))
+	ip, port := remoteaddr.Parse().AddHeaders([]string{"True-Client-IP"}).IP(r)
+	fmt.Fprintf(w, "Your IP address is "+ip+" and dst port "+port)
 }
 
 func main() {
