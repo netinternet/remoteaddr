@@ -19,8 +19,8 @@ func Parse() *Addr {
 		"172.16.0.0/12",
 		"192.168.0.0/16",
 	}
-	// CloudFlare IP Address Space; https://www.cloudflare.com/ips/
-	cf_prefixes := []string{
+	waf_prefixes := []string{
+		// CloudFlare IP Address Space; https://www.cloudflare.com/ips/
 		"103.21.244.0/22",
 		"103.22.200.0/22",
 		"103.31.4.0/22",
@@ -43,10 +43,16 @@ func Parse() *Addr {
 		"2405:8100::/32",
 		"2a06:98c0::/29",
 		"2c0f:f248::/32",
+
+		// HEIMWALL IPs
+		"159.253.42.0/24",
+		"94.102.14.5/24",
+		"2a03:2100:a::/48",
+		"2a03:2100:b::/48",
 	}
 	return &Addr{
-		Forwarders: append(local_prefixes, cf_prefixes...),
-		Headers:    []string{"X-Forwarded-For", "X-Real-Ip", "CF-Connecting-IP"},
+		Forwarders: append(local_prefixes, waf_prefixes...),
+		Headers:    []string{"CF-Connecting-IP", "X-Forwarded-For", "X-Real-Ip"},
 	}
 }
 
@@ -72,10 +78,11 @@ func (a *Addr) isForwarders(ip net.IP) bool {
 	return false
 }
 
-// Add http.request to find real IPv4 or IPv6 address
-func (a *Addr) IP(r *http.Request) string {
-	ipaddr, _, _ := net.SplitHostPort(r.RemoteAddr)
+// Add http.request to find real IPv4 or IPv6 address and destination port
+func (a *Addr) IP(r *http.Request) (ipaddr string, port string) {
+	ipaddr, port, _ = net.SplitHostPort(r.RemoteAddr)
 	if a.isForwarders(net.ParseIP(ipaddr)) {
+		port = "-1"
 		for _, h := range a.Headers {
 			for _, ip := range strings.Split(r.Header.Get(h), ",") {
 				realIP := net.ParseIP(strings.Replace(ip, " ", "", -1))
@@ -88,5 +95,5 @@ func (a *Addr) IP(r *http.Request) string {
 			}
 		}
 	}
-	return ipaddr
+	return ipaddr, port
 }
