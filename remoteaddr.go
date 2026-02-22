@@ -84,13 +84,19 @@ func (a *Addr) IP(r *http.Request) (ipaddr string, port string) {
 	if a.isForwarders(net.ParseIP(ipaddr)) {
 		port = "-1"
 		for _, h := range a.Headers {
-			for _, ip := range strings.Split(r.Header.Get(h), ",") {
-				realIP := net.ParseIP(strings.Replace(ip, " ", "", -1))
-				if check := net.ParseIP(realIP.String()); check != nil {
+			header := r.Header.Get(h)
+			if header == "" {
+				continue
+			}
+			ips := strings.Split(header, ",")
+			for i := len(ips) - 1; i >= 0; i-- {
+				realIP := net.ParseIP(strings.TrimSpace(ips[i]))
+				if realIP == nil {
+					continue
+				}
+				if !a.isForwarders(realIP) {
 					ipaddr = realIP.String()
-					if !a.isForwarders(net.ParseIP(ipaddr)) {
-						break
-					}
+					return ipaddr, port
 				}
 			}
 		}
