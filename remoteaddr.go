@@ -3,12 +3,14 @@ package remoteaddr
 import (
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
 type Addr struct {
-	Forwarders []string
-	Headers    []string
+	Forwarders  []string
+	Headers     []string
+	PortHeaders []string
 }
 
 // Inital function
@@ -51,8 +53,9 @@ func Parse() *Addr {
 		"2a03:2100:b::/48",
 	}
 	return &Addr{
-		Forwarders: append(local_prefixes, waf_prefixes...),
-		Headers:    []string{"CF-Connecting-IP", "X-Forwarded-For", "X-Real-Ip"},
+		Forwarders:  append(local_prefixes, waf_prefixes...),
+		Headers:     []string{"CF-Connecting-IP", "X-Forwarded-For", "X-Real-Ip"},
+		PortHeaders: []string{"Cf-Connecting-Port", "True-Client-Port"},
 	}
 }
 
@@ -68,10 +71,35 @@ func (a *Addr) AddHeaders(headers []string) *Addr {
 	return a
 }
 
+// Add more Real Client Port Headers
+func (a *Addr) AddPortHeaders(headers []string) *Addr {
+	a.PortHeaders = append(a.PortHeaders, headers...)
+	return a
+}
+
+// realPort reads the client port from a trusted forwarder's port header.
+// Returns "-1" if no header carries a valid TCP port (1-65535).
+func (a *Addr) realPort(r *http.Request) string {
+	for _, h := range a.PortHeaders {
+		value := strings.TrimSpace(r.Header.Get(h))
+		if value == "" {
+			continue
+		}
+		if p, err := strconv.Atoi(value); err == nil && p >= 1 && p <= 65535 {
+			return value
+		}
+	}
+	return "-1"
+}
+
 // Helper function
 func (a *Addr) isForwarders(ip net.IP) bool {
 	for _, forwarder := range a.Forwarders {
-		if _, cidr, _ := net.ParseCIDR(forwarder); cidr.Contains(ip) {
+		_, cidr, err := net.ParseCIDR(forwarder)
+		if err != nil || cidr == nil {
+			continue
+		}
+		if cidr.Contains(ip) {
 			return true
 		}
 	}
@@ -82,7 +110,7 @@ func (a *Addr) isForwarders(ip net.IP) bool {
 func (a *Addr) IP(r *http.Request) (ipaddr string, port string) {
 	ipaddr, port, _ = net.SplitHostPort(r.RemoteAddr)
 	if a.isForwarders(net.ParseIP(ipaddr)) {
-		port = "-1"
+		port = a.realPort(r)
 		for _, h := range a.Headers {
 			header := r.Header.Get(h)
 			if header == "" {

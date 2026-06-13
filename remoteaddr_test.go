@@ -151,6 +151,72 @@ func TestMultiProxyChain(t *testing.T) {
 	_, err = http.DefaultClient.Do(req)
 	require.NoError(t, err)
 }
+func TestRealPortFromHeader(t *testing.T) {
+	realClientIP := "85.100.50.25"
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		parser := newTestParser()
+		ip, port := parser.IP(r)
+
+		require.Equal(t, realClientIP, ip)
+		require.Equal(t, "54321", port, "True-Client-Port forwarder'dan okunmalı")
+	}))
+	defer ts.Close()
+
+	req, err := http.NewRequest("GET", ts.URL, nil)
+	require.NoError(t, err)
+
+	req.Header.Set("CF-Connecting-IP", realClientIP)
+	req.Header.Set("True-Client-Port", "54321")
+
+	_, err = http.DefaultClient.Do(req)
+	require.NoError(t, err)
+}
+
+func TestInvalidPortHeaderFallsBackToMinusOne(t *testing.T) {
+	realClientIP := "85.100.50.25"
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		parser := newTestParser()
+		_, port := parser.IP(r)
+
+		require.Equal(t, "-1", port, "Geçersiz port header'ı -1'e düşmeli")
+	}))
+	defer ts.Close()
+
+	req, err := http.NewRequest("GET", ts.URL, nil)
+	require.NoError(t, err)
+
+	req.Header.Set("CF-Connecting-IP", realClientIP)
+	req.Header.Set("True-Client-Port", "99999") // 65535 üstü -> geçersiz
+
+	_, err = http.DefaultClient.Do(req)
+	require.NoError(t, err)
+}
+
+func TestPortHeaderIgnoredOnDirectConnection(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Forwarder listesi boş -> doğrudan bağlantı, header'a güvenilmemeli
+		parser := &remoteaddr.Addr{
+			Forwarders:  []string{},
+			Headers:     []string{"CF-Connecting-IP"},
+			PortHeaders: []string{"True-Client-Port"},
+		}
+		_, port := parser.IP(r)
+
+		require.NotEqual(t, "54321", port, "Doğrudan bağlantıda port header'ı spoof edilememeli")
+	}))
+	defer ts.Close()
+
+	req, err := http.NewRequest("GET", ts.URL, nil)
+	require.NoError(t, err)
+
+	req.Header.Set("True-Client-Port", "54321")
+
+	_, err = http.DefaultClient.Do(req)
+	require.NoError(t, err)
+}
+
 func TestSingleXForwardedForSpoofing(t *testing.T) {
 	spoofedIP := "31.69.99.22"
 

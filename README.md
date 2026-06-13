@@ -3,7 +3,7 @@ Go http real ip header parser module
 
 A forwarders such as a reverse proxy or Cloudflare find the real IP address from the requests made to the http server behind it. Local IP addresses and CloudFlare ip addresses are defined by default within the module. It is possible to define more forwarder IP addresses.
 
-In Turkey, it is obligatory to keep the port information of IP addresses shared with cgnat by the law no 5651. For this reason, dst port information is also given along with the IP addresses. **If the IP address is behind a proxy, the dst port information is returned as -1.**
+In Turkey, it is obligatory to keep the port information of IP addresses shared with cgnat by the law no 5651. For this reason, dst port information is also given along with the IP addresses. **If the IP address is behind a proxy, the dst port information is returned as `-1`** — the port on `r.RemoteAddr` belongs to the proxy's own connection, not the real client, so exposing it would be misleading. Some proxies forward the real client port in a header (Cloudflare `Cf-Connecting-Port`, Heimwall `True-Client-Port`); when a request comes from a trusted forwarder, that header is read and validated (must be a `1-65535` TCP port), otherwise the port stays `-1`. Additional port headers can be registered with `AddPortHeaders`.
 
 ## Usage
 
@@ -67,6 +67,17 @@ func main() {
 	log.Fatal(http.ListenAndServe(":8081", nil))
 }
 
+```
+
+## Example 4 (Add an alternative header for real client port)
+
+**AddPortHeaders([]string{"X-Real-Port"})** = Add a new multiple real client port headers (defaults already include `Cf-Connecting-Port` and `True-Client-Port`)
+
+```go
+func root(w http.ResponseWriter, r *http.Request) {
+	ip, port := remoteaddr.Parse().AddPortHeaders([]string{"X-Real-Port"}).IP(r)
+	fmt.Fprintf(w, "Your IP address is "+ip+" and dst port "+port)
+}
 ```
 
 ## Example 3 (Add an alternative header for real IP address)
