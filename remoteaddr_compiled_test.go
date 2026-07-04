@@ -105,3 +105,52 @@ func BenchmarkParseAndIP(b *testing.B) {
 		_, _ = remoteaddr.Parse().AddForwarders([]string{"198.51.100.0/24"}).IP(r)
 	}
 }
+
+// SetForwarders must discard the built-in defaults: a request arriving from a
+// Cloudflare IP must NOT be trusted once the caller declared their own proxy set.
+func TestSetForwardersResetsDefaults(t *testing.T) {
+	p := remoteaddr.Parse().SetForwarders([]string{"10.0.0.0/8"})
+
+	// CF IP artık forwarder DEĞİL → header yok sayılır, RemoteAddr döner.
+	ip, port := p.IP(req("104.16.1.1:443", map[string]string{"X-Forwarded-For": "203.0.113.9"}))
+	require.Equal(t, "104.16.1.1", ip, "CF prefix'i resetten sonra güvenilmemeli")
+	require.Equal(t, "443", port)
+
+	// Kendi proxy'si çalışmaya devam etmeli (fast path — compiled senkron).
+	ip, _ = p.IP(req("10.1.0.8:80", map[string]string{"X-Forwarded-For": "203.0.113.9"}))
+	require.Equal(t, "203.0.113.9", ip)
+}
+
+// Empty SetForwarders must trust nobody: headers are always ignored.
+func TestSetForwardersEmptyTrustsNothing(t *testing.T) {
+	p := remoteaddr.Parse().SetForwarders(nil)
+	ip, _ := p.IP(req("10.1.0.8:80", map[string]string{"X-Forwarded-For": "203.0.113.9"}))
+	require.Equal(t, "10.1.0.8", ip)
+}
+
+// SetHeaders replaces the header list; SetPortHeaders(nil) disables port headers.
+func TestSetHeadersAndPortHeaders(t *testing.T) {
+	p := remoteaddr.Parse().
+		SetForwarders([]string{"10.0.0.0/8"}).
+		SetHeaders([]string{"X-My-Proxy-IP"}).
+		SetPortHeaders(nil)
+
+	r := req("10.1.0.8:80", map[string]string{
+		"X-Forwarded-For":  "198.51.100.99", // artık okunmamalı
+		"X-My-Proxy-IP":    "203.0.113.9",
+		"True-Client-Port": "54321", // kapalı — okunmamalı
+	})
+	ip, port := p.IP(r)
+	require.Equal(t, "203.0.113.9", ip)
+	require.Equal(t, "-1", port)
+}
+
+// Mutating the caller's input slice after SetForwarders must not affect the parser
+// (defensive copy).
+func TestSetForwardersDefensiveCopy(t *testing.T) {
+	in := []string{"10.0.0.0/8"}
+	p := remoteaddr.Parse().SetForwarders(in)
+	in[0] = "0.0.0.0/0" // saldırgan-vari mutasyon — parser etkilenmemeli
+	ip, _ := p.IP(req("203.0.113.7:80", map[string]string{"X-Forwarded-For": "198.51.100.1"}))
+	require.Equal(t, "203.0.113.7", ip, "input slice mutasyonu parser'a sızmamalı")
+}

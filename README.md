@@ -106,3 +106,34 @@ func main() {
 }
 
 ```
+
+## Example 5 (Not behind Cloudflare? Replace the trusted forwarder list)
+
+The built-in defaults trust RFC1918 private ranges **and the Cloudflare IP space**.
+If your service is **not** actually behind Cloudflare, keeping those defaults widens
+your header-spoofing surface: anyone can route a request through Cloudflare (a
+Worker, any proxied zone) so that it arrives from a "trusted" CF address carrying a
+forged `X-Forwarded-For`. Use `SetForwarders` to **replace** the whole list with
+only the proxies you really operate behind:
+
+```go
+func root(w http.ResponseWriter, r *http.Request) {
+	ip, port := remoteaddr.Parse().
+		SetForwarders([]string{"10.0.0.0/8", "203.0.113.10/32"}). // only YOUR proxies
+		SetHeaders([]string{"X-Real-Ip"}).                        // only the header YOUR proxy sets
+		SetPortHeaders(nil).                                      // disable port headers entirely
+		IP(r)
+	fmt.Fprintf(w, "Your IP address is "+ip+" and dst port "+port)
+}
+```
+
+`SetForwarders(nil)` trusts no forwarder at all: headers are always ignored and
+`r.RemoteAddr` is returned as-is. `Set*` methods replace, `Add*` methods extend.
+
+## Performance
+
+Forwarder prefixes are compiled once (`net/netip`) when the parser is built;
+`IP()` performs zero parsing per request (~79 ns, 0 allocs for a direct client on
+Apple silicon — previously ~1.9 µs and 116 allocs when every call re-parsed each
+CIDR). Build the parser once and reuse it if you can; even per-request
+construction stays cheap because the default set is pre-compiled at package init.

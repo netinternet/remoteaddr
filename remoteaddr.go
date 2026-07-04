@@ -136,6 +136,40 @@ func (a *Addr) AddPortHeaders(headers []string) *Addr {
 	return a
 }
 
+// SetForwarders REPLACES the trusted forwarder prefixes entirely, discarding the
+// built-in defaults (RFC1918 + Cloudflare + Heimwall). Use this when your service
+// is NOT behind those networks: trusting prefixes that are not actually in front
+// of you widens the header-spoofing surface — e.g. if you do not use Cloudflare,
+// anyone can route a request through Cloudflare (Workers, any proxied zone) and
+// forge X-Forwarded-For, because the connection arrives from a "trusted" CF IP.
+// Pass only the prefixes of the proxies you really operate behind; pass an empty
+// list to trust no forwarder at all (headers are then always ignored).
+func (a *Addr) SetForwarders(prefixes []string) *Addr {
+	a.Forwarders = append([]string(nil), prefixes...)
+	a.compiled = compileCIDRs(a.Forwarders)
+	a.compiledN = len(a.Forwarders)
+	return a
+}
+
+// SetHeaders REPLACES the real-IP header list entirely (default:
+// CF-Connecting-IP, X-Forwarded-For, X-Real-Ip). Useful when only your own
+// proxy's header should ever be consulted.
+func (a *Addr) SetHeaders(headers []string) *Addr {
+	a.Headers = append([]string(nil), headers...)
+	return a
+}
+
+// SetPortHeaders REPLACES the client-port header list entirely (default:
+// Cf-Connecting-Port, True-Client-Port). Pass nil/empty to disable port headers;
+// the port is then always reported as "-1" behind a forwarder. Note that
+// Cf-Connecting-Port must be explicitly enabled on the Cloudflare side, and any
+// header your proxy does not strip can be forged by the client — only list
+// headers your proxy is known to set or remove.
+func (a *Addr) SetPortHeaders(headers []string) *Addr {
+	a.PortHeaders = append([]string(nil), headers...)
+	return a
+}
+
 // realPort reads the client port from a trusted forwarder's port header.
 // Returns "-1" if no header carries a valid TCP port (1-65535).
 func (a *Addr) realPort(r *http.Request) string {
